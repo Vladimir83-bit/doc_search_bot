@@ -2,7 +2,7 @@ import os
 
 class Config:
     # Получите токен у @BotFather в Telegram
-    TOKEN = 'ВАШ_ТОКЕН_БОТА'
+    TOKEN = '7562511884:AAGdhqnv3Gn3cgxD4IxsNGrROS1j1DKFNY0'
     
     # Папка для хранения документов
     DOCS_FOLDER = 'docs'
