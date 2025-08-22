@@ -5,11 +5,10 @@ from config import Config
 from file_storage import FileStorage
 from document_parser import DocumentParser
 
-# Инициализация бота
+
 bot = telebot.TeleBot(Config.TOKEN)
 
 def create_main_keyboard():
-    """Создание клавиатуры с основными кнопками"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton("🔍 Поиск в документах"))
     markup.add(types.KeyboardButton("📁 Список документов"))
@@ -18,11 +17,6 @@ def create_main_keyboard():
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    """Обработка команд /start и /help"""
-    # Проверка доступа
-    if message.from_user.id not in Config.ALLOWED_USERS:
-        bot.reply_to(message, "⛔ Доступ запрещен")
-        return
     
     welcome_text = (
         "📚 Бот для поиска в документах\n\n"
@@ -39,19 +33,15 @@ def send_welcome(message):
 
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
-    """Обработка загружаемых документов"""
-    if message.from_user.id not in Config.ALLOWED_USERS:
-        bot.reply_to(message, "⛔ Доступ запрещен")
-        return
     
     try:
-        # Проверка размера файла
+    
         if message.document.file_size > Config.MAX_FILE_SIZE:
             bot.reply_to(message, 
                         f"⚠ Файл слишком большой. Максимум: {Config.MAX_FILE_SIZE//1024//1024}MB")
             return
             
-        # Проверка расширения файла
+        
         file_name = message.document.file_name
         file_ext = os.path.splitext(file_name)[1].lower()
         
@@ -60,11 +50,11 @@ def handle_document(message):
                         f"⚠ Неподдерживаемый формат. Разрешенные: {', '.join(Config.ALLOWED_EXTENSIONS)}")
             return
             
-        # Скачивание файла
+        
         file_info = bot.get_file(message.document.file_id)
         file_data = bot.download_file(file_info.file_path)
         
-        # Сохранение файла
+        
         saved_path = FileStorage.save_file(message.document.file_id, file_name, file_data)
         
         if saved_path:
@@ -108,7 +98,7 @@ def process_search_query(message):
     search_text = message.text.lower()
     found_in = []
     
-    # Поиск по всем документам
+    
     for doc in FileStorage.get_all_docs():
         file_path = os.path.join(Config.DOCS_FOLDER, doc)
         content = DocumentParser.parse_file(file_path).lower()
@@ -116,7 +106,7 @@ def process_search_query(message):
         if search_text in content:
             found_in.append(doc)
     
-    # Формирование ответа
+    
     if found_in:
         response = "🔍 Найдено в документах:\n\n" + "\n".join(f"📌 {doc}" for doc in found_in)
     else:

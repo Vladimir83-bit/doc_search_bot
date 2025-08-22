@@ -52,7 +52,7 @@ class DocumentParser:
     @classmethod
     def parse_file(cls, file_path):
         """Автоматическое определение типа файла и его обработка"""
-        # Проверяем расширение файла
+       
         ext = os.path.splitext(file_path)[1].lower()
         
         if ext == '.txt':
