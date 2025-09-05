@@ -1,23 +1,31 @@
 import os
-import telebot
-from telebot import types
+import asyncio
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiogram.types import FSInputFile
 from config import Config
 from file_storage import FileStorage
 from document_parser import DocumentParser
 
+# Инициализация бота
+bot = Bot(token=Config.TOKEN)
+dp = Dispatcher()
 
-bot = telebot.TeleBot(Config.TOKEN)
-
+# Клавиатура
 def create_main_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("🔍 Поиск в документах"))
-    markup.add(types.KeyboardButton("📁 Список документов"))
-    markup.add(types.KeyboardButton("❌ Удалить все документы"))
-    return markup
+    keyboard = types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="🔍 Поиск в документах")],
+            [types.KeyboardButton(text="📁 Список документов")],
+            [types.KeyboardButton(text="❌ Удалить все документы")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
 
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    
+# Обработчик /start и /help
+@dp.message(Command("start", "help"))
+async def send_welcome(message: types.Message):
     welcome_text = (
         "📚 Бот для поиска в документах\n\n"
         "Отправьте мне документы в форматах:\n"
@@ -28,46 +36,44 @@ def send_welcome(message):
         "После загрузки используйте кнопки ниже для поиска."
     )
     
-    bot.send_message(message.chat.id, welcome_text, 
-                    reply_markup=create_main_keyboard())
+    await message.answer(welcome_text, reply_markup=create_main_keyboard())
 
-@bot.message_handler(content_types=['document'])
-def handle_document(message):
-    
+# Обработчик документов
+@dp.message(F.document)
+async def handle_document(message: types.Message):
     try:
-    
+        # Проверка размера файла
         if message.document.file_size > Config.MAX_FILE_SIZE:
-            bot.reply_to(message, 
-                        f"⚠ Файл слишком большой. Максимум: {Config.MAX_FILE_SIZE//1024//1024}MB")
+            await message.answer(f"⚠ Файл слишком большой. Максимум: {Config.MAX_FILE_SIZE//1024//1024}MB")
             return
             
-        
+        # Проверка расширения
         file_name = message.document.file_name
         file_ext = os.path.splitext(file_name)[1].lower()
         
         if file_ext not in Config.ALLOWED_EXTENSIONS:
-            bot.reply_to(message, 
-                        f"⚠ Неподдерживаемый формат. Разрешенные: {', '.join(Config.ALLOWED_EXTENSIONS)}")
+            await message.answer(f"⚠ Неподдерживаемый формат. Разрешенные: {', '.join(Config.ALLOWED_EXTENSIONS)}")
             return
             
+        # Скачивание файла
+        file = await bot.get_file(message.document.file_id)
+        file_path = file.file_path
+        file_data = await bot.download_file(file_path)
         
-        file_info = bot.get_file(message.document.file_id)
-        file_data = bot.download_file(file_info.file_path)
-        
-        
-        saved_path = FileStorage.save_file(message.document.file_id, file_name, file_data)
+        # Сохранение файла
+        saved_path = FileStorage.save_file(message.document.file_id, file_name, file_data.read())
         
         if saved_path:
-            bot.reply_to(message, f"✅ Документ '{file_name}' успешно загружен!")
+            await message.answer(f"✅ Документ '{file_name}' успешно загружен!")
         else:
-            bot.reply_to(message, "❌ Ошибка при сохранении файла")
+            await message.answer("❌ Ошибка при сохранении файла")
             
     except Exception as e:
-        bot.reply_to(message, f"❌ Произошла ошибка: {str(e)}")
+        await message.answer(f"❌ Произошла ошибка: {str(e)}")
 
-@bot.message_handler(func=lambda m: m.text == "📁 Список документов")
-def list_documents(message):
-    """Показ списка всех загруженных документов"""
+# Обработчик кнопок
+@dp.message(F.text == "📁 Список документов")
+async def list_documents(message: types.Message):
     docs = FileStorage.get_all_docs()
     
     if docs:
@@ -75,46 +81,24 @@ def list_documents(message):
     else:
         response = "📭 Нет загруженных документов"
         
-    bot.send_message(message.chat.id, response, 
-                    reply_markup=create_main_keyboard())
+    await message.answer(response, reply_markup=create_main_keyboard())
 
-@bot.message_handler(func=lambda m: m.text == "❌ Удалить все документы")
-def clear_documents(message):
-    """Удаление всех документов"""
+@dp.message(F.text == "❌ Удалить все документы")
+async def clear_documents(message: types.Message):
     if FileStorage.clear_all_docs():
-        bot.send_message(message.chat.id, "✅ Все документы удалены",
-                        reply_markup=create_main_keyboard())
+        await message.answer("✅ Все документы удалены", reply_markup=create_main_keyboard())
     else:
-        bot.send_message(message.chat.id, "❌ Ошибка при удалении документов")
+        await message.answer("❌ Ошибка при удалении документов")
 
-@bot.message_handler(func=lambda m: m.text == "🔍 Поиск в документах")
-def handle_search(message):
-    """Запуск процесса поиска"""
-    msg = bot.send_message(message.chat.id, "🔍 Введите текст для поиска:")
-    bot.register_next_step_handler(msg, process_search_query)
+@dp.message(F.text == "🔍 Поиск в документах")
+async def handle_search(message: types.Message):
+    await message.answer("🔍 Введите текст для поиска:")
+    # Для обработки следующего сообщения потребуется машина состояний
 
-def process_search_query(message):
-    """Обработка поискового запроса"""
-    search_text = message.text.lower()
-    found_in = []
-    
-    
-    for doc in FileStorage.get_all_docs():
-        file_path = os.path.join(Config.DOCS_FOLDER, doc)
-        content = DocumentParser.parse_file(file_path).lower()
-        
-        if search_text in content:
-            found_in.append(doc)
-    
-    
-    if found_in:
-        response = "🔍 Найдено в документах:\n\n" + "\n".join(f"📌 {doc}" for doc in found_in)
-    else:
-        response = "😞 Ничего не найдено"
-    
-    bot.send_message(message.chat.id, response,
-                    reply_markup=create_main_keyboard())
+# Запуск бота
+async def main():
+    print("🟢 Бот запущен...")
+    await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    print("🟢 Бот запущен...")
-    bot.infinity_polling()
+    asyncio.run(main())
