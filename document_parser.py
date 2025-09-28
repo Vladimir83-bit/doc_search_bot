@@ -1,7 +1,6 @@
 from PyPDF2 import PdfReader
 from docx import Document
 import pandas as pd
-import magic
 import os
 
 class DocumentParser:
@@ -11,8 +10,15 @@ class DocumentParser:
     def parse_text(file_path):
         """Чтение обычных текстовых файлов (.txt)"""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
+            # Пробуем разные кодировки
+            encodings = ['utf-8', 'cp1251', 'windows-1251']
+            for encoding in encodings:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        return f.read()
+                except UnicodeDecodeError:
+                    continue
+            return ""
         except Exception as e:
             print(f"Ошибка чтения TXT: {e}")
             return ""
@@ -23,7 +29,11 @@ class DocumentParser:
         text = ""
         try:
             reader = PdfReader(file_path)
-            for page in reader.pages:
+            # Ограничим количество страниц для больших файлов
+            max_pages = 50
+            for i, page in enumerate(reader.pages):
+                if i >= max_pages:
+                    break
                 text += page.extract_text() or ""
         except Exception as e:
             print(f"Ошибка чтения PDF: {e}")
@@ -52,7 +62,7 @@ class DocumentParser:
     @classmethod
     def parse_file(cls, file_path):
         """Автоматическое определение типа файла и его обработка"""
-       
+        # Проверяем расширение файла
         ext = os.path.splitext(file_path)[1].lower()
         
         if ext == '.txt':

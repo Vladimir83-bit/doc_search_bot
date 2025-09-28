@@ -2,7 +2,8 @@ import os
 import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import FSInputFile
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from config import Config
 from file_storage import FileStorage
 from document_parser import DocumentParser
@@ -10,6 +11,10 @@ from document_parser import DocumentParser
 # Инициализация бота
 bot = Bot(token=Config.TOKEN)
 dp = Dispatcher()
+
+# Машина состояний для поиска
+class SearchStates(StatesGroup):
+    waiting_for_search_query = State()
 
 # Клавиатура
 def create_main_keyboard():
@@ -57,8 +62,7 @@ async def handle_document(message: types.Message):
             
         # Скачивание файла
         file = await bot.get_file(message.document.file_id)
-        file_path = file.file_path
-        file_data = await bot.download_file(file_path)
+        file_data = await bot.download_file(file.file_path)
         
         # Сохранение файла
         saved_path = FileStorage.save_file(message.document.file_id, file_name, file_data.read())
@@ -91,12 +95,37 @@ async def clear_documents(message: types.Message):
         await message.answer("❌ Ошибка при удалении документов")
 
 @dp.message(F.text == "🔍 Поиск в документах")
-async def handle_search(message: types.Message):
+async def handle_search(message: types.Message, state: FSMContext):
     await message.answer("🔍 Введите текст для поиска:")
-    # Для обработки следующего сообщения потребуется машина состояний
+    await state.set_state(SearchStates.waiting_for_search_query)
+
+# Обработчик поискового запроса
+@dp.message(SearchStates.waiting_for_search_query)
+async def process_search_query(message: types.Message, state: FSMContext):
+    search_text = message.text.lower()
+    found_in = []
+    
+    # Поиск по всем документам
+    for doc in FileStorage.get_all_docs():
+        file_path = os.path.join(Config.DOCS_FOLDER, doc)
+        content = DocumentParser.parse_file(file_path).lower()
+        
+        if search_text in content:
+            found_in.append(doc)
+    
+    # Формирование ответа
+    if found_in:
+        response = "🔍 Найдено в документах:\n\n" + "\n".join(f"📌 {doc}" for doc in found_in)
+    else:
+        response = "😞 Ничего не найдено"
+    
+    await message.answer(response, reply_markup=create_main_keyboard())
+    await state.clear()  # Сбрасываем состояние
 
 # Запуск бота
 async def main():
+    # Принудительно удаляем вебхук
+    await bot.delete_webhook(drop_pending_updates=True)
     print("🟢 Бот запущен...")
     await dp.start_polling(bot)
 
