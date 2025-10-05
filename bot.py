@@ -102,8 +102,43 @@ async def handle_search(message: types.Message, state: FSMContext):
 # Обработчик поискового запроса
 @dp.message(SearchStates.waiting_for_search_query)
 async def process_search_query(message: types.Message, state: FSMContext):
-    search_text = message.text.lower()
-    found_in = []
+    search_text = message.text
+    found_results = {}
+    
+    # Поиск по всем документам с контекстом
+    for doc in FileStorage.get_all_docs():
+        file_path = os.path.join(Config.DOCS_FOLDER, doc)
+        paragraphs = DocumentParser.find_text_with_context(file_path, search_text)
+        
+        if paragraphs:
+            found_results[doc] = paragraphs
+    
+    # Формирование ответа
+    if found_results:
+        response = f"🔍 Найдено '{search_text}' в документах:\n\n"
+        
+        for filename, paragraphs in found_results.items():
+            response += f"📄 **{filename}**:\n"
+            
+            for i, paragraph in enumerate(paragraphs, 1):
+                # Выделяем искомый текст в абзаце
+                highlighted_paragraph = paragraph.replace(
+                    search_text, 
+                    f"**{search_text}**"
+                )
+                response += f"{i}. {highlighted_paragraph}\n\n"
+            
+            response += "─" * 30 + "\n\n"
+            
+    else:
+        response = f"😞 Текст '{search_text}' не найден в документах"
+    
+    # Разбиваем длинные сообщения (Telegram ограничение 4096 символов)
+    if len(response) > 4000:
+        response = response[:4000] + "\n\n... (сообщение обрезано, слишком много результатов)"
+    
+    await message.answer(response, reply_markup=create_main_keyboard())
+    await state.clear()
     
     # Поиск по всем документам
     for doc in FileStorage.get_all_docs():

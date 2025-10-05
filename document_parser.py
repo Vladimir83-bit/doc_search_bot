@@ -2,6 +2,7 @@ from PyPDF2 import PdfReader
 from docx import Document
 import pandas as pd
 import os
+import re
 
 class DocumentParser:
     """Класс для извлечения текста из разных форматов документов"""
@@ -10,7 +11,6 @@ class DocumentParser:
     def parse_text(file_path):
         """Чтение обычных текстовых файлов (.txt)"""
         try:
-            # Пробуем разные кодировки
             encodings = ['utf-8', 'cp1251', 'windows-1251']
             for encoding in encodings:
                 try:
@@ -29,7 +29,6 @@ class DocumentParser:
         text = ""
         try:
             reader = PdfReader(file_path)
-            # Ограничим количество страниц для больших файлов
             max_pages = 50
             for i, page in enumerate(reader.pages):
                 if i >= max_pages:
@@ -62,7 +61,6 @@ class DocumentParser:
     @classmethod
     def parse_file(cls, file_path):
         """Автоматическое определение типа файла и его обработка"""
-        # Проверяем расширение файла
         ext = os.path.splitext(file_path)[1].lower()
         
         if ext == '.txt':
@@ -76,3 +74,54 @@ class DocumentParser:
         else:
             print(f"Неподдерживаемый формат: {ext}")
             return ""
+
+    @staticmethod
+    def find_text_with_context(file_path, search_text, context_words=20):
+        """Находит текст и возвращает абзацы/фрагменты с контекстом"""
+        try:
+            content = DocumentParser.parse_file(file_path)
+            if not content:
+                return []
+            
+            search_text_lower = search_text.lower()
+            content_lower = content.lower()
+            
+            # Разбиваем текст на абзацы/предложения
+            paragraphs = []
+            if file_path.endswith('.docx'):
+                # Для Word документов используем настоящие абзацы
+                doc = Document(file_path)
+                paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+            else:
+                # Для других форматов разбиваем по переносам строк
+                paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
+            
+            # Если не получилось разбить на абзацы, разбиваем по точкам
+            if not paragraphs:
+                paragraphs = [s.strip() for s in content.split('.') if s.strip()]
+            
+            found_paragraphs = []
+            
+            # Ищем в каждом абзаце
+            for paragraph in paragraphs:
+                if search_text_lower in paragraph.lower():
+                    # Ограничиваем длину абзаца для удобства чтения
+                    if len(paragraph) > 500:
+                        # Находим позицию искомого текста
+                        pos = paragraph.lower().find(search_text_lower)
+                        start = max(0, pos - 100)
+                        end = min(len(paragraph), pos + len(search_text) + 100)
+                        shortened_paragraph = paragraph[start:end]
+                        if start > 0:
+                            shortened_paragraph = "..." + shortened_paragraph
+                        if end < len(paragraph):
+                            shortened_paragraph = shortened_paragraph + "..."
+                        found_paragraphs.append(shortened_paragraph)
+                    else:
+                        found_paragraphs.append(paragraph)
+            
+            return found_paragraphs[:5]  # Ограничиваем 5 абзацами на файл
+            
+        except Exception as e:
+            print(f"Ошибка поиска в файле {file_path}: {e}")
+            return []
