@@ -17,12 +17,14 @@ desktop.ini
 
 ### 4. Python ###
 __pycache__/    # Кэш интерпретатора
-*.py[cod]       # Скомпилированные файлы
+*.py[cod]       # Скомпилированные файлы (включает *.pyc, *.pyo)
 *.so            # Библиотеки C
 *.egg-info/     # Метаданные пакетов
+*.pyd
 
 ### 5. Виртуальное окружение ###
-venv/           # Virtualenv
+venv/
+.venv/
 .env/           # Pipenv
 pythonenv/
 bin/
@@ -31,6 +33,7 @@ include/
 
 ### 6. Логи и временные файлы ###
 *.log
+logs/           # Папка с логами
 *.tmp
 *.temp
 
