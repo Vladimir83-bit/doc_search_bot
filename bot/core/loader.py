@@ -7,4 +7,4 @@ bot = Bot(token=Config.TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-__all__ = ['bot', 'dp']
+__all__ = ['bot', 'dp', 'storage']

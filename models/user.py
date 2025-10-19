@@ -15,6 +15,4 @@ class User(Base):
     last_activity = Column(DateTime, default=datetime.datetime.utcnow)
     documents_uploaded = Column(Integer, default=0)
     searches_performed = Column(Integer, default=0)
-    
-    def __repr__(self):
-        return f"<User {self.user_id} - {self.username}>"
+    is_active = Column(Boolean, default=True)

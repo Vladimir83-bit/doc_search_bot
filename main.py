@@ -1,22 +1,28 @@
 import asyncio
-import logging
 from bot.core.loader import bot, dp
 from bot.core.config import Config
-from bot.utils.logger import setup_logger
+from bot.utils.logger import logger
+from bot.utils.database import create_tables
+from bot.middlewares.errors import setup_error_handling
 
 # Импортируем обработчики
 from bot.handlers import private, common
-
-# Настройка логирования
-logger = setup_logger()
 
 async def main():
     """Главная функция запуска бота"""
     logger.info("Запуск улучшенной версии бота...")
     
+    # Создаем таблицы БД
+    create_tables()
+    logger.info("База данных инициализирована")
+    
+    # Настройка обработки ошибок
+    setup_error_handling(dp)
+    
     # Удаляем вебхук и запускаем поллинг
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("Бот успешно запущен и готов к работе!")
+    logger.info("✅ Бот успешно запущен и готов к работе!")
+    
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

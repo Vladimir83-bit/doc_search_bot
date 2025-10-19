@@ -1,5 +1,6 @@
 import os
-from config import Config
+# ИСПРАВЛЕННЫЙ ИМПОРТ:
+from bot.core.config import Config  # ← ИСПРАВИТЬ ЭТУ СТРОКУ
 
 class FileStorage:
     """Класс для работы с файлами на диске"""
@@ -8,14 +9,14 @@ class FileStorage:
     def save_file(file_id, file_name, file_data):
         """Сохранение загруженного файла"""
         try:
-            
+            # Создаем папку, если ее нет
             if not os.path.exists(Config.DOCS_FOLDER):
                 os.makedirs(Config.DOCS_FOLDER)
             
-            
+            # Полный путь к файлу
             file_path = os.path.join(Config.DOCS_FOLDER, file_name)
             
-            
+            # Сохраняем файл
             with open(file_path, 'wb') as f:
                 f.write(file_data)
             
