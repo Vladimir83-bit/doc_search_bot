@@ -55,27 +55,141 @@ async def send_welcome(message: types.Message):
         logger.error(f"Error in send_welcome: {e}")
         await message.answer("❌ Произошла ошибка при запуске")
 
-# ✅ СЮДА ДОБАВЬТЕ ВАШИ СУЩЕСТВУЮЩИЕ ФУНКЦИИ:
-# - handle_document
-# - list_documents  
-# - clear_documents
-# - handle_search
-# - process_search_query
-
-# Временно добавим заглушки чтобы бот запустился
 @dp.message(F.document)
 async def handle_document(message: types.Message):
-    await message.answer("📄 Функция загрузки документов будет добавлена скоро!")
+    """Обработчик загрузки документов - РЕАЛЬНАЯ ЗАГРУЗКА"""
+    try:
+        document = message.document
+        
+        # Проверяем размер файла
+        if document.file_size > Config.MAX_FILE_SIZE:
+            await message.answer("❌ Файл слишком большой (максимум 10МБ)")
+            return
+        
+        # Проверяем расширение
+        file_ext = os.path.splitext(document.file_name)[1].lower()
+        if file_ext not in Config.ALLOWED_EXTENSIONS:
+            await message.answer(f"❌ Неподдерживаемый формат. Разрешены: {', '.join(Config.ALLOWED_EXTENSIONS)}")
+            return
+        
+        # Скачиваем файл
+        file_info = await bot.get_file(document.file_id)
+        downloaded_file = await bot.download_file(file_info.file_path)
+        file_data = downloaded_file.read()
+        
+        # Сохраняем файл
+        saved_path = FileStorage.save_file(document.file_id, document.file_name, file_data)
+        
+        if saved_path:
+            await message.answer(f"✅ Документ '{document.file_name}' успешно загружен!")
+            await increment_documents_count(message.from_user.id)
+            logger.info(f"User {message.from_user.id} uploaded {document.file_name}")
+        else:
+            await message.answer("❌ Ошибка при сохранении файла")
+            
+    except Exception as e:
+        logger.error(f"Error handling document: {e}")
+        await message.answer("❌ Ошибка при обработке документа")
 
 @dp.message(F.text == "🔍 Поиск в документах")
 async def handle_search(message: types.Message, state: FSMContext):
-    await message.answer("🔍 Функция поиска будет добавлена скоро!")
+    """Начало поиска в документах"""
+    # Проверяем есть ли документы
+    docs = FileStorage.get_all_docs()
+    if not docs:
+        await message.answer("📂 Сначала загрузите документы для поиска!")
+        return
+        
+    await message.answer("🔍 Введите поисковый запрос:")
     await state.set_state(SearchStates.waiting_for_search_query)
+
+@dp.message(SearchStates.waiting_for_search_query)
+async def process_search_query(message: types.Message, state: FSMContext):
+    """Обработка поискового запроса - РЕАЛЬНЫЙ ПОИСК"""
+    try:
+        query = message.text.lower().strip()
+        
+        if not query:
+            await message.answer("❌ Введите непустой запрос для поиска")
+            await state.clear()
+            return
+        
+        docs = FileStorage.get_all_docs()
+        
+        if not docs:
+            await message.answer("📂 Документы не найдены. Сначала загрузите документы!")
+            await state.clear()
+            return
+        
+        found_results = []
+        
+        # Ищем в каждом документе
+        for doc_name in docs:
+            doc_path = os.path.join(Config.DOCS_FOLDER, doc_name)
+            
+            # Извлекаем текст из документа
+            text = DocumentParser.parse_file(doc_path)
+            
+            if text and query in text.lower():
+                # Нашли совпадение - добавляем в результаты
+                found_results.append(doc_name)
+        
+        # Формируем ответ
+        if found_results:
+            results_text = "\n".join([f"• {doc}" for doc in found_results])
+            response = (
+                f"🔍 Найдено в {len(found_results)} документах:\n\n"
+                f"{results_text}\n\n"
+                f"💡 Запрос: '{query}'"
+            )
+        else:
+            response = f"❌ По запросу '{query}' ничего не найдено"
+        
+        await message.answer(response)
+        await increment_searches_count(message.from_user.id)
+        logger.info(f"User {message.from_user.id} searched for '{query}', found {len(found_results)} results")
+        
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        await message.answer("❌ Ошибка при выполнении поиска")
+    
+    await state.clear()
 
 @dp.message(F.text == "📁 Список документов")
 async def list_documents(message: types.Message):
-    await message.answer("📂 Функция списка документов будет добавлена скоро!")
+    """Показать список документов"""
+    try:
+        docs = FileStorage.get_all_docs()
+        
+        if docs:
+            docs_list = "\n".join([f"• {doc}" for doc in docs[:10]])  # первые 10 документов
+            text = f"📂 Ваши документы ({len(docs)}):\n\n{docs_list}"
+            if len(docs) > 10:
+                text += f"\n\n... и еще {len(docs) - 10} документов"
+        else:
+            text = "📂 У вас пока нет документов"
+            
+        await message.answer(text)
+    except Exception as e:
+        logger.error(f"Error listing documents: {e}")
+        await message.answer("❌ Ошибка при получении списка документов")
 
 @dp.message(F.text == "❌ Удалить все документы")
 async def clear_documents(message: types.Message):
-    await message.answer("🗑️ Функция удаления документов будет добавлена скоро!")
+    """Удалить все документы"""
+    try:
+        if FileStorage.clear_all_docs():
+            await message.answer("🗑️ Все документы удалены!")
+            logger.info(f"User {message.from_user.id} cleared all documents")
+        else:
+            await message.answer("❌ Ошибка при удалении документов")
+    except Exception as e:
+        logger.error(f"Error clearing documents: {e}")
+        await message.answer("❌ Ошибка при удалении документов")
+
+# Добавим обработчик для любых текстовых сообщений
+@dp.message(F.text)
+async def handle_text_messages(message: types.Message):
+    """Обработчик любых текстовых сообщений"""
+    if message.text not in ["🔍 Поиск в документах", "📁 Список документов", "📊 Моя статистика", "❌ Удалить все документы"]:
+        await message.answer("🤖 Используйте кнопки ниже для работы с ботом!")

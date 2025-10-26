@@ -2,7 +2,7 @@ import os
 
 class Config:
     # Основные настройки бота
-    TOKEN = "7562511884:AAGdhqnv3Gn3cgxD4IxsNGrROS1j1DKFNY0"  # ⚠️ ЗАМЕНИТЕ НА ВАШ ТОКЕН
+    TOKEN = "7562511884:AAGdhqnv3Gn3cgxD4IxsNGrROS1j1DKFNY0"
     
     # Настройки документов
     DOCS_FOLDER = 'docs'

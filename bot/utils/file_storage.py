@@ -1,6 +1,5 @@
 import os
-# ИСПРАВЛЕННЫЙ ИМПОРТ:
-from bot.core.config import Config  # ← ИСПРАВИТЬ ЭТУ СТРОКУ
+from bot.core.config import Config
 
 class FileStorage:
     """Класс для работы с файлами на диске"""
@@ -33,7 +32,8 @@ class FileStorage:
                 return []
                 
             return [f for f in os.listdir(Config.DOCS_FOLDER) 
-                   if os.path.splitext(f)[1].lower() in Config.ALLOWED_EXTENSIONS]
+                   if os.path.isfile(os.path.join(Config.DOCS_FOLDER, f)) and
+                   os.path.splitext(f)[1].lower() in Config.ALLOWED_EXTENSIONS]
         except Exception as e:
             print(f"Ошибка чтения списка файлов: {e}")
             return []
@@ -42,9 +42,13 @@ class FileStorage:
     def clear_all_docs():
         """Удаление всех документов"""
         try:
+            if not os.path.exists(Config.DOCS_FOLDER):
+                return True
+                
             for filename in os.listdir(Config.DOCS_FOLDER):
                 file_path = os.path.join(Config.DOCS_FOLDER, filename)
-                os.remove(file_path)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
             return True
         except Exception as e:
             print(f"Ошибка удаления файлов: {e}")
