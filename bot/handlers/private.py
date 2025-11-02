@@ -9,10 +9,9 @@ from bot.core.loader import dp, bot
 from bot.core.config import Config
 from bot.utils.database import get_user, update_user_activity, increment_documents_count, increment_searches_count
 from bot.utils.logger import logger
-
-# Импортируем ваши парсеры
 from bot.utils.document_parser import DocumentParser
 from bot.utils.file_storage import FileStorage
+from bot.utils.search_settings import search_settings
 
 # Машина состояний для поиска
 class SearchStates(StatesGroup):
@@ -53,7 +52,7 @@ async def send_welcome(message: types.Message):
         
         welcome_text = (
             "📚 Бот для поиска в документах\n\n"
-            "Отправьте мне документы в формаats:\n"
+            "Отправьте мне документы в форматах:\n"
             "- TXT (текст)\n"
             "- PDF\n"
             "- DOCX (Word)\n"
@@ -133,6 +132,10 @@ async def process_search_query(message: types.Message, state: FSMContext):
             await state.clear()
             return
         
+        # Получаем настройки
+        context_size = search_settings.get_setting('context_size')
+        max_matches = search_settings.get_setting('max_matches_per_file')
+        
         found_results = []
         total_matches = 0
         
@@ -145,7 +148,7 @@ async def process_search_query(message: types.Message, state: FSMContext):
             
             if text and query in text.lower():
                 # Нашли совпадения - ищем ВСЕ вхождения с контекстом
-                matches = DocumentParser.find_all_matches(text, query, max_matches=10, context_size=80)
+                matches = DocumentParser.find_all_matches(text, query, max_matches=max_matches, context_size=context_size)
                 
                 if matches:
                     found_results.append({
@@ -169,17 +172,17 @@ async def process_search_query(message: types.Message, state: FSMContext):
                 
                 response += "\n"
             
-            response += f"💡 Запрос: '{query}'"
+            response += f"💡 Запрос: '{query}'\n"
+            response += f"⚙️ Настройки: контекст {context_size} симв., макс. {max_matches} совпад./файл"
             
             # Если результат слишком длинный, разбиваем на части
             if len(response) > 4000:
                 # Сокращаем вывод - показываем только первые 2 файла
                 response = f"🔍 Найдено {total_matches} совпадений в {len(found_results)} документах:\n\n"
                 
-                for result in found_results[:2]:  # Показываем только первые 2 файла
+                for result in found_results[:2]:
                     response += f"📄 **{result['filename']}** ({result['match_count']} совпадений)\n"
                     
-                    # Показываем только первые 3 совпадения в каждом файле
                     for i, match in enumerate(result['matches'][:3], 1):
                         response += f"**Совпадение {i}:**\n"
                         response += f"```\n{match[:150]}...\n```\n"
@@ -189,7 +192,8 @@ async def process_search_query(message: types.Message, state: FSMContext):
                 if len(found_results) > 2:
                     response += f"💡 Показаны первые 2 из {len(found_results)} файлов\n"
                 
-                response += f"💡 Запрос: '{query}'"
+                response += f"💡 Запрос: '{query}'\n"
+                response += f"⚙️ Настройки: контекст {context_size} симв., макс. {max_matches} совпад./файл"
                 
         else:
             response = f"❌ По запросу '{query}' ничего не найдено"
@@ -290,17 +294,133 @@ async def translate_menu(message: types.Message):
 
 @dp.message(F.text == "⚙️ Настройки")
 async def settings_menu(message: types.Message):
-    """Меню настроек"""
+    """Меню настроек поиска"""
+    settings = search_settings.get_all_settings()
+    
     settings_text = (
-        "⚙️ **Настройки бота**\n\n"
-        "📏 **Размер контекста:** 100 символов\n"
-        "📄 **Макс. совпадений:** 10 на файл\n"
-        "🔍 **Тип поиска:** Обычный\n\n"
-        "Используйте команды для изменения:\n"
-        "`/context 150` - изменить размер контекста\n"
-        "`/matches 5` - макс. совпадений на файл"
+        "⚙️ **Настройки поиска**\n\n"
+        f"📏 **Размер контекста:** {settings['context_size']} символов\n"
+        f"📄 **Макс. совпадений на файл:** {settings['max_matches_per_file']}\n"
+        f"🔍 **Тип поиска:** {settings['search_type']}\n"
+        f"🌐 **Автоперевод:** {'Включен' if settings['auto_translate'] else 'Выключен'}\n"
+        f"👁️ **Показ превью:** {'Включен' if settings['show_preview'] else 'Выключен'}\n\n"
+        "**Команды для изменения:**\n"
+        "`/context 150` - размер контекста\n"
+        "`/matches 5` - макс. совпадений\n"
+        "`/search_type fuzzy` - тип поиска\n"
+        "`/toggle_translate` - автоперевод\n"
+        "`/toggle_preview` - показ превью"
     )
-    await message.answer(settings_text)
+    
+    await message.answer(settings_text, parse_mode="Markdown")
+
+# Обработчики команд для настроек
+@dp.message(Command("context"))
+async def set_context_size(message: types.Message):
+    """Установка размера контекста"""
+    try:
+        parts = message.text.split()
+        if len(parts) != 2:
+            await message.answer("❌ Использование: `/context 150`")
+            return
+        
+        size = int(parts[1])
+        if size < 50 or size > 500:
+            await message.answer("❌ Размер контекста должен быть от 50 до 500 символов")
+            return
+        
+        if search_settings.set_setting('context_size', size):
+            await message.answer(f"✅ Размер контекста изменен на {size} символов")
+        else:
+            await message.answer("❌ Ошибка сохранения настроек")
+            
+    except ValueError:
+        await message.answer("❌ Укажите число: `/context 150`")
+    except Exception as e:
+        logger.error(f"Context setting error: {e}")
+        await message.answer("❌ Ошибка при изменении настроек")
+
+@dp.message(Command("matches"))
+async def set_max_matches(message: types.Message):
+    """Установка максимального количества совпадений"""
+    try:
+        parts = message.text.split()
+        if len(parts) != 2:
+            await message.answer("❌ Использование: `/matches 5`")
+            return
+        
+        matches = int(parts[1])
+        if matches < 1 or matches > 50:
+            await message.answer("❌ Количество совпадений должно быть от 1 до 50")
+            return
+        
+        if search_settings.set_setting('max_matches_per_file', matches):
+            await message.answer(f"✅ Макс. совпадений изменено на {matches}")
+        else:
+            await message.answer("❌ Ошибка сохранения настроек")
+            
+    except ValueError:
+        await message.answer("❌ Укажите число: `/matches 5`")
+    except Exception as e:
+        logger.error(f"Matches setting error: {e}")
+        await message.answer("❌ Ошибка при изменении настроек")
+
+@dp.message(Command("search_type"))
+async def set_search_type(message: types.Message):
+    """Установка типа поиска"""
+    try:
+        parts = message.text.split()
+        if len(parts) != 2:
+            await message.answer("❌ Использование: `/search_type exact|fuzzy|boolean`")
+            return
+        
+        search_type = parts[1].lower()
+        if search_type not in ['exact', 'fuzzy', 'boolean']:
+            await message.answer("❌ Доступные типы: exact, fuzzy, boolean")
+            return
+        
+        if search_settings.set_setting('search_type', search_type):
+            await message.answer(f"✅ Тип поиска изменен на '{search_type}'")
+        else:
+            await message.answer("❌ Ошибка сохранения настроек")
+            
+    except Exception as e:
+        logger.error(f"Search type setting error: {e}")
+        await message.answer("❌ Ошибка при изменении настроек")
+
+@dp.message(Command("toggle_translate"))
+async def toggle_translate(message: types.Message):
+    """Переключение автоперевода"""
+    try:
+        current = search_settings.get_setting('auto_translate')
+        new_value = not current
+        
+        if search_settings.set_setting('auto_translate', new_value):
+            status = "включен" if new_value else "выключен"
+            await message.answer(f"✅ Автоперевод {status}")
+        else:
+            await message.answer("❌ Ошибка сохранения настроек")
+            
+    except Exception as e:
+        logger.error(f"Translate toggle error: {e}")
+        await message.answer("❌ Ошибка при изменении настроек")
+
+@dp.message(Command("toggle_preview"))
+async def toggle_preview(message: types.Message):
+    """Переключение показа превью"""
+    try:
+        current = search_settings.get_setting('show_preview')
+        new_value = not current
+        
+        if search_settings.set_setting('show_preview', new_value):
+            status = "включен" if new_value else "выключен"
+            await message.answer(f"✅ Показ превью {status}")
+        else:
+            await message.answer("❌ Ошибка сохранения настроек")
+            
+    except Exception as e:
+        logger.error(f"Preview toggle error: {e}")
+        await message.answer("❌ Ошибка при изменении настроек")
 
 # Обработчики инлайн-кнопок
 @dp.callback_query(F.data == "quick_search")

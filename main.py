@@ -5,12 +5,12 @@ from bot.utils.logger import logger
 from bot.utils.database import create_tables
 from bot.middlewares.errors import setup_error_handling
 
-# Импортируем обработчики
-from bot.handlers import private, common
+# Импортируем ВСЕ обработчики
+from bot.handlers import private, common, groups
 
 async def main():
     """Главная функция запуска бота"""
-    logger.info("Запуск бота...")
+    logger.info("Запуск бота с поддержкой групп...")
     
     # Создаем таблицы БД
     create_tables()
@@ -21,7 +21,7 @@ async def main():
     
     # Удаляем вебхук и запускаем поллинг
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("✅ Бот успешно запущен!")
+    logger.info("✅ Бот успешно запущен с поддержкой групп!")
     
     await dp.start_polling(bot)
 

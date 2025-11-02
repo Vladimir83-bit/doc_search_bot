@@ -1,0 +1,7 @@
+{
+  "context_size": 150,
+  "max_matches_per_file": 10,
+  "search_type": "fuzzy",
+  "auto_translate": true,
+  "show_preview": true
+}
