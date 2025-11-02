@@ -105,7 +105,7 @@ async def handle_search(message: types.Message, state: FSMContext):
 
 @dp.message(SearchStates.waiting_for_search_query)
 async def process_search_query(message: types.Message, state: FSMContext):
-    """Обработка поискового запроса - РЕАЛЬНЫЙ ПОИСК"""
+    """Обработка поискового запроса - ПОИСК ВСЕХ СОВПАДЕНИЙ"""
     try:
         query = message.text.lower().strip()
         
@@ -122,6 +122,7 @@ async def process_search_query(message: types.Message, state: FSMContext):
             return
         
         found_results = []
+        total_matches = 0
         
         # Ищем в каждом документе
         for doc_name in docs:
@@ -131,23 +132,59 @@ async def process_search_query(message: types.Message, state: FSMContext):
             text = DocumentParser.parse_file(doc_path)
             
             if text and query in text.lower():
-                # Нашли совпадение - добавляем в результаты
-                found_results.append(doc_name)
+                # Нашли совпадения - ищем ВСЕ вхождения с контекстом
+                matches = DocumentParser.find_all_matches(text, query, max_matches=10, context_size=80)
+                
+                if matches:
+                    found_results.append({
+                        'filename': doc_name,
+                        'matches': matches,
+                        'match_count': len(matches)
+                    })
+                    total_matches += len(matches)
         
         # Формируем ответ
         if found_results:
-            results_text = "\n".join([f"• {doc}" for doc in found_results])
-            response = (
-                f"🔍 Найдено в {len(found_results)} документах:\n\n"
-                f"{results_text}\n\n"
-                f"💡 Запрос: '{query}'"
-            )
+            response = f"🔍 Найдено {total_matches} совпадений в {len(found_results)} документах:\n\n"
+            
+            for result in found_results:
+                response += f"📄 **{result['filename']}** ({result['match_count']} совпадений)\n"
+                
+                # Показываем все найденные совпадения в этом файле
+                for i, match in enumerate(result['matches'], 1):
+                    response += f"**Совпадение {i}:**\n"
+                    response += f"```\n{match}\n```\n"
+                
+                response += "\n"
+            
+            response += f"💡 Запрос: '{query}'"
+            
+            # Если результат слишком длинный, разбиваем на части
+            if len(response) > 4000:
+                # Сокращаем вывод - показываем только первые 2 файла
+                response = f"🔍 Найдено {total_matches} совпадений в {len(found_results)} документах:\n\n"
+                
+                for result in found_results[:2]:  # Показываем только первые 2 файла
+                    response += f"📄 **{result['filename']}** ({result['match_count']} совпадений)\n"
+                    
+                    # Показываем только первые 3 совпадения в каждом файле
+                    for i, match in enumerate(result['matches'][:3], 1):
+                        response += f"**Совпадение {i}:**\n"
+                        response += f"```\n{match[:150]}...\n```\n"
+                    
+                    response += "\n"
+                
+                if len(found_results) > 2:
+                    response += f"💡 Показаны первые 2 из {len(found_results)} файлов\n"
+                
+                response += f"💡 Запрос: '{query}'"
+                
         else:
             response = f"❌ По запросу '{query}' ничего не найдено"
         
-        await message.answer(response)
+        await message.answer(response, parse_mode="Markdown")
         await increment_searches_count(message.from_user.id)
-        logger.info(f"User {message.from_user.id} searched for '{query}', found {len(found_results)} results")
+        logger.info(f"User {message.from_user.id} searched for '{query}', found {total_matches} matches in {len(found_results)} files")
         
     except Exception as e:
         logger.error(f"Search error: {e}")
@@ -186,6 +223,27 @@ async def clear_documents(message: types.Message):
     except Exception as e:
         logger.error(f"Error clearing documents: {e}")
         await message.answer("❌ Ошибка при удалении документов")
+
+@dp.message(F.text == "📊 Моя статистика")
+async def stats_button(message: types.Message):
+    """Обработчик кнопки статистики"""
+    try:
+        user = await get_user(message.from_user.id)
+        
+        stats_text = (
+            f"📊 Ваша статистика:\n"
+            f"👤 Пользователь: {user.full_name}\n"
+            f"📅 Зарегистрирован: {user.created_at.strftime('%d.%m.%Y')}\n"
+            f"📄 Загружено документов: {user.documents_uploaded}\n"
+            f"🔍 Выполнено поисков: {user.searches_performed}\n"
+            f"🕒 Последняя активность: {user.last_activity.strftime('%H:%M %d.%m.%Y')}"
+        )
+        
+        await message.answer(stats_text)
+        logger.info(f"User {message.from_user.id} checked stats via button")
+    except Exception as e:
+        logger.error(f"Error showing stats from button: {e}")
+        await message.answer("❌ Не удалось загрузить статистику")
 
 # Добавим обработчик для любых текстовых сообщений
 @dp.message(F.text)
