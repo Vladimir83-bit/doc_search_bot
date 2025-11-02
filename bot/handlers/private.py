@@ -22,12 +22,24 @@ class SearchStates(StatesGroup):
 def create_main_keyboard():
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="🔍 Поиск в документах")],
-            [types.KeyboardButton(text="📁 Список документов")],
-            [types.KeyboardButton(text="📊 Моя статистика")],
+            [types.KeyboardButton(text="🔍 Поиск в документах"), types.KeyboardButton(text="📁 Список документов")],
+            [types.KeyboardButton(text="🎯 Умный поиск"), types.KeyboardButton(text="🌐 Переводчик")],
+            [types.KeyboardButton(text="📊 Моя статистика"), types.KeyboardButton(text="⚙️ Настройки")],
             [types.KeyboardButton(text="❌ Удалить все документы")]
         ],
         resize_keyboard=True
+    )
+    return keyboard
+
+# Инлайн-клавиатура для быстрых действий
+def create_inline_keyboard():
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text="🔍 Быстрый поиск", callback_data="quick_search")],
+            [types.InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
+            [types.InlineKeyboardButton(text="🔄 Обновить список", callback_data="refresh_list")],
+            [types.InlineKeyboardButton(text="❓ Помощь", callback_data="help")]
+        ]
     )
     return keyboard
 
@@ -41,7 +53,7 @@ async def send_welcome(message: types.Message):
         
         welcome_text = (
             "📚 Бот для поиска в документах\n\n"
-            "Отправьте мне документы в форматах:\n"
+            "Отправьте мне документы в формаats:\n"
             "- TXT (текст)\n"
             "- PDF\n"
             "- DOCX (Word)\n"
@@ -245,9 +257,69 @@ async def stats_button(message: types.Message):
         logger.error(f"Error showing stats from button: {e}")
         await message.answer("❌ Не удалось загрузить статистику")
 
+# НОВЫЕ ФУНКЦИИ ДЛЯ УЛУЧШЕНИЙ
+
+@dp.message(F.text == "🎯 Умный поиск")
+async def smart_search_menu(message: types.Message):
+    """Меню умного поиска"""
+    menu_text = (
+        "🎯 **Умный поиск**\n\n"
+        "Выберите тип поиска:\n"
+        "• **Обычный** - точное совпадение\n"
+        "• **Нечеткий** - с учетом опечаток\n"
+        "• **Булев** - с операторами AND/OR/NOT\n\n"
+        "Для использования отправьте команду:\n"
+        "`/fuzzy ваш запрос` - нечеткий поиск\n"
+        "`/boolean запрос and другой` - булев поиск"
+    )
+    await message.answer(menu_text)
+
+@dp.message(F.text == "🌐 Переводчик")
+async def translate_menu(message: types.Message):
+    """Меню переводчика"""
+    menu_text = (
+        "🌐 **Переводчик**\n\n"
+        "Перевод текста и поиск синонимов\n\n"
+        "Команды:\n"
+        "`/translate en ваш текст` - перевод на английский\n"
+        "`/synonyms слово` - поиск синонимов\n"
+        "`/weather город` - погода\n"
+        "`/news тема` - новости"
+    )
+    await message.answer(menu_text)
+
+@dp.message(F.text == "⚙️ Настройки")
+async def settings_menu(message: types.Message):
+    """Меню настроек"""
+    settings_text = (
+        "⚙️ **Настройки бота**\n\n"
+        "📏 **Размер контекста:** 100 символов\n"
+        "📄 **Макс. совпадений:** 10 на файл\n"
+        "🔍 **Тип поиска:** Обычный\n\n"
+        "Используйте команды для изменения:\n"
+        "`/context 150` - изменить размер контекста\n"
+        "`/matches 5` - макс. совпадений на файл"
+    )
+    await message.answer(settings_text)
+
+# Обработчики инлайн-кнопок
+@dp.callback_query(F.data == "quick_search")
+async def quick_search_callback(callback: types.CallbackQuery):
+    await callback.message.answer("🔍 Введите поисковый запрос:")
+    await callback.answer()
+
+@dp.callback_query(F.data == "refresh_list")
+async def refresh_list_callback(callback: types.CallbackQuery):
+    from bot.utils.file_storage import FileStorage
+    docs = FileStorage.get_all_docs()
+    count = len(docs)
+    await callback.message.answer(f"📂 Обновлено! Документов: {count}")
+    await callback.answer()
+
 # Добавим обработчик для любых текстовых сообщений
 @dp.message(F.text)
 async def handle_text_messages(message: types.Message):
     """Обработчик любых текстовых сообщений"""
-    if message.text not in ["🔍 Поиск в документах", "📁 Список документов", "📊 Моя статистика", "❌ Удалить все документы"]:
+    if message.text not in ["🔍 Поиск в документах", "📁 Список документов", "🎯 Умный поиск", 
+                          "🌐 Переводчик", "📊 Моя статистика", "⚙️ Настройки", "❌ Удалить все документы"]:
         await message.answer("🤖 Используйте кнопки ниже для работы с ботом!")

@@ -10,7 +10,7 @@ from bot.handlers import private, common
 
 async def main():
     """Главная функция запуска бота"""
-    logger.info("Запуск улучшенной версии бота...")
+    logger.info("Запуск бота...")
     
     # Создаем таблицы БД
     create_tables()
@@ -21,7 +21,7 @@ async def main():
     
     # Удаляем вебхук и запускаем поллинг
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("✅ Бот успешно запущен и готов к работе!")
+    logger.info("✅ Бот успешно запущен!")
     
     await dp.start_polling(bot)
 
