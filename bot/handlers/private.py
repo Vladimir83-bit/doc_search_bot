@@ -12,6 +12,7 @@ from bot.utils.logger import logger
 from bot.utils.document_parser import DocumentParser
 from bot.utils.file_storage import FileStorage
 from bot.utils.search_settings import search_settings
+from bot.utils.api_client import api_client
 
 # Машина состояний для поиска
 class SearchStates(StatesGroup):
@@ -32,6 +33,11 @@ def create_main_keyboard():
                 types.KeyboardButton(text="🌐 Переводчик"),
                 types.KeyboardButton(text="🗑️ Удалить всё"),
                 types.KeyboardButton(text="❓ Помощь")
+            ],
+            [
+                types.KeyboardButton(text="📰 Новости"),
+                types.KeyboardButton(text="🌤️ Погода"),
+                types.KeyboardButton(text="🎭 Развлечения")
             ]
         ],
         resize_keyboard=True
@@ -51,7 +57,8 @@ async def send_welcome(message: types.Message):
             "**Основные функции:**\n"
             "• Загрузка документов (TXT, PDF, DOCX, XLSX)\n"  
             "• Поиск текста в документах\n"
-            "• Просмотр статистики и настроек\n\n"
+            "• Просмотр статистики и настроек\n"
+            "• Новости, погода и развлечения\n\n"
             "💡 **Используйте кнопки ниже для навигации**"
         )
         
@@ -205,6 +212,192 @@ async def help_command(message: types.Message):
     )
     await message.answer(help_text)
 
+# ОБРАБОТЧИКИ КНОПОК ТРЕТЬЕЙ СТРОКИ (API ФУНКЦИИ)
+@dp.message(F.text == "📰 Новости")
+async def news_command(message: types.Message):
+    """Получить последние новости"""
+    try:
+        await message.answer("📰 Загружаю последние новости...")
+        news = await api_client.get_news("technology")
+        await message.answer(news, disable_web_page_preview=True)
+    except Exception as e:
+        logger.error(f"News error: {e}")
+        await message.answer("❌ Не удалось загрузить новости")
+
+@dp.message(F.text == "🌤️ Погода")
+async def weather_command(message: types.Message):
+    """Получить погоду"""
+    try:
+        await message.answer("🌤️ Загружаю данные о погоде...")
+        weather = await api_client.get_weather("Москва")
+        await message.answer(weather)
+    except Exception as e:
+        logger.error(f"Weather error: {e}")
+        await message.answer("❌ Не удалось загрузить погоду")
+
+@dp.message(F.text == "🎭 Развлечения")
+async def entertainment_command(message: types.Message):
+    """Развлекательные функции"""
+    try:
+        # Случайный факт
+        fact = await api_client.get_random_fact()
+        
+        # Отправляем мем
+        await message.answer_photo(
+            photo="https://i.imgur.com/1Bc7Y7s.jpeg",  # Замени на свою ссылку
+            caption=f"{fact}\n\n😂 Вот мем для настроения!"
+        )
+    except Exception as e:
+        logger.error(f"Entertainment error: {e}")
+        await message.answer("❌ Ошибка при загрузке развлечений")
+
+# ОБРАБОТЧИКИ РАЗНЫХ ТИПОВ КОНТЕНТА
+@dp.message(F.photo)
+async def handle_photo(message: types.Message):
+    """Обработка фотографий"""
+    try:
+        # Сохраняем информацию о фото в лог
+        photo_info = (
+            f"📸 Получено фото от {message.from_user.full_name}\n"
+            f"Размер: {message.photo[-1].file_size} байт\n"
+            f"ID файла: {message.photo[-1].file_id}"
+        )
+        logger.info(f"Photo received from {message.from_user.id}: {message.photo[-1].file_id}")
+        
+        await message.answer(
+            f"{photo_info}\n\n"
+            "Классное фото! Могу его проанализировать или сохранить."
+        )
+        
+        # Можно отправить ответное фото
+        await message.answer_photo(
+            photo="https://i.imgur.com/1Bc7Y7s.jpeg",  # Замени на свою ссылку
+            caption="Вот мой ответный мем! 😊"
+        )
+    except Exception as e:
+        logger.error(f"Photo handling error: {e}")
+        await message.answer("❌ Ошибка при обработке фото")
+
+@dp.message(F.sticker)
+async def handle_sticker(message: types.Message):
+    """Обработка стикеров"""
+    try:
+        sticker_info = (
+            f"😊 Стикер от {message.from_user.full_name}\n"
+            f"ID набора: {message.sticker.set_name}\n"
+            f"Эмодзи: {message.sticker.emoji}"
+        )
+        logger.info(f"Sticker received from {message.from_user.id}: {message.sticker.file_id}")
+        
+        await message.answer(sticker_info)
+        
+        # Отправляем ответный стикер
+        await message.answer_sticker(
+            sticker="CAACAgIAAxkBAAIBMWgAApV2AAE1lAAAAAEAAgMAA3dJwAACBCkAAwABgUo",  # Замени на ID своего стикера
+            reply_to_message_id=message.message_id
+        )
+    except Exception as e:
+        logger.error(f"Sticker handling error: {e}")
+        await message.answer("😊 Крутой стикер! К сожалению, не могу отправить ответный стикер.")
+
+@dp.message(F.video)
+async def handle_video(message: types.Message):
+    """Обработка видео"""
+    try:
+        video_info = (
+            f"🎥 Видео от {message.from_user.full_name}\n"
+            f"Длительность: {message.video.duration} сек\n"
+            f"Размер: {message.video.file_size} байт\n"
+            f"Разрешение: {message.video.width}x{message.video.height}"
+        )
+        logger.info(f"Video received from {message.from_user.id}: {message.video.file_id}")
+        
+        await message.answer(
+            f"{video_info}\n\n"
+            "Видео получено! Могу его проанализировать или сохранить метаданные."
+        )
+    except Exception as e:
+        logger.error(f"Video handling error: {e}")
+        await message.answer("❌ Ошибка при обработке видео")
+
+@dp.message(F.voice)
+async def handle_voice(message: types.Message):
+    """Обработка голосовых сообщений"""
+    try:
+        voice_info = (
+            f"🎤 Голосовое сообщение от {message.from_user.full_name}\n"
+            f"Длительность: {message.voice.duration} сек\n"
+            f"Размер: {message.voice.file_size} байт"
+        )
+        logger.info(f"Voice received from {message.from_user.id}: {message.voice.file_id}")
+        
+        await message.answer(
+            f"{voice_info}\n\n"
+            "Голосовое сообщение получено! К сожалению, пока не умею распознавать речь."
+        )
+    except Exception as e:
+        logger.error(f"Voice handling error: {e}")
+        await message.answer("❌ Ошибка при обработке голосового сообщения")
+
+@dp.message(F.animation)
+async def handle_gif(message: types.Message):
+    """Обработка GIF-анимаций"""
+    try:
+        gif_info = (
+            f"🎬 GIF от {message.from_user.full_name}\n"
+            f"Длительность: {message.animation.duration} сек\n"
+            f"Размер: {message.animation.file_size} байт"
+        )
+        logger.info(f"GIF received from {message.from_user.id}: {message.animation.file_id}")
+        
+        await message.answer(
+            f"{gif_info}\n\n"
+            "Крутая GIF-анимация! Сохранил информацию о ней."
+        )
+    except Exception as e:
+        logger.error(f"GIF handling error: {e}")
+        await message.answer("❌ Ошибка при обработке GIF")
+
+# КОМАНДЫ ДЛЯ ОТПРАВКИ РАЗНОГО КОНТЕНТА
+@dp.message(Command("meme"))
+async def send_meme(message: types.Message):
+    """Отправить мем"""
+    try:
+        await message.answer_photo(
+            photo="https://i.imgur.com/1Bc7Y7s.jpeg",  # Замени на реальную ссылку
+            caption="😂 Вот свежий мем для тебя! Надеюсь, поднимет настроение!"
+        )
+        logger.info(f"Sent meme to {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Meme sending error: {e}")
+        await message.answer("❌ Не удалось отправить мем")
+
+@dp.message(Command("sticker"))
+async def send_sticker(message: types.Message):
+    """Отправить стикер"""
+    try:
+        await message.answer_sticker(
+            sticker="CAACAgIAAxkBAAIBMWgAApV2AAE1lAAAAAEAAgMAA3dJwAACBCkAAwABgUo",  # Замени на ID своего стикера
+            reply_to_message_id=message.message_id
+        )
+        logger.info(f"Sent sticker to {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"Sticker sending error: {e}")
+        await message.answer("❌ Не удалось отправить стикер")
+
+@dp.message(Command("gif"))
+async def send_gif(message: types.Message):
+    """Отправить GIF"""
+    try:
+        await message.answer_animation(
+            animation="https://media.giphy.com/media/3o7aCTPPm4OHfRLSH6/giphy.gif",  # Замени на свою ссылку
+            caption="🎬 Вот крутая GIF-анимация!"
+        )
+        logger.info(f"Sent GIF to {message.from_user.id}")
+    except Exception as e:
+        logger.error(f"GIF sending error: {e}")
+        await message.answer("❌ Не удалось отправить GIF")
+
 # ТЕКСТОВЫЕ КОМАНДЫ ДЛЯ БЫСТРОГО ДОСТУПА
 @dp.message(Command("search"))
 async def search_command(message: types.Message, state: FSMContext):
@@ -225,6 +418,14 @@ async def settings_command(message: types.Message):
 @dp.message(Command("help"))
 async def help_text_command(message: types.Message):
     await help_command(message)
+
+@dp.message(Command("news"))
+async def news_text_command(message: types.Message):
+    await news_command(message)
+
+@dp.message(Command("weather"))
+async def weather_text_command(message: types.Message):
+    await weather_command(message)
 
 # СУЩЕСТВУЮЩИЕ ОБРАБОТЧИКИ (без изменений)
 @dp.message(F.document)
@@ -423,5 +624,6 @@ async def set_search_type(message: types.Message):
 async def handle_text_messages(message: types.Message):
     """Обработчик любых текстовых сообщений"""
     if message.text not in ["🔍 Поиск", "📁 Документы", "📊 Статистика", "⚙️ Настройки",
-                          "🎯 Умный поиск", "🌐 Переводчик", "🗑️ Удалить всё", "❓ Помощь"]:
+                          "🎯 Умный поиск", "🌐 Переводчик", "🗑️ Удалить всё", "❓ Помощь",
+                          "📰 Новости", "🌤️ Погода", "🎭 Развлечения"]:
         await message.answer("🤖 Используйте кнопки ниже для работы с ботом!", reply_markup=create_main_keyboard())

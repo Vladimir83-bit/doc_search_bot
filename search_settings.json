@@ -1,6 +1,6 @@
 {
   "context_size": 150,
-  "max_matches_per_file": 20,
+  "max_matches_per_file": 50,
   "search_type": "fuzzy",
   "auto_translate": true,
   "show_preview": true
